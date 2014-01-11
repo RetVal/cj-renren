@@ -69,16 +69,16 @@
       nil
       (let [se (re-seq (re-pattern "\\'.*?\\'") (str item))]
         (zipmap (map keyword '("type" "gid" "uid" "owner" "name"))
-                (map #(list (subs % 1 (dec (count %)))) se))))))
+                (map #(subs % 1 (dec (count %))) se))))))
 
 (defn do-event-url [parser-result event-type]
   (format "http://like.renren.com/%s?gid=%s_%s&uid=%s&owner=%s&type=%d&name=%s"
-          event-type (first (:type parser-result))
-          (first (:gid parser-result))
-          (first (:uid parser-result))
-          (first (:owner parser-result))
+          event-type (:type parser-result)
+          (:gid parser-result)
+          (:uid parser-result)
+          (:owner parser-result)
           3
-          (first (:name parser-result))))
+          (:name parser-result)))
 
 (defn do-event-action [event]
   (let [{:keys[status headers body]} (client/get event {:cookie-store renren-cookie})]
@@ -97,6 +97,19 @@
      (when-let [[~sym & xs#] (seq coll#)]
        ~@body
        (recur (next coll#)))))
+(def lst '())
+(drop-last 1 (flatten (map #(match-all regular-expression-2 %) (match-all regular-expression-1 (:body (client/get (user-feed-coll-url
+                                                                              "359364053"
+                                                                              token
+                                                                              1)
+                                                                             {:cookie-store renren-cookie}))))))
+
+
+(feed-match-result-parser (first (flatten (cons (map #(match-all regular-expression-2 %) (match-all regular-expression-1 (:body (client/get (user-feed-coll-url
+                                                                              "359364053"
+                                                                              token
+                                                                              1)
+                                                                             {:cookie-store renren-cookie})))) lst))))
 
 (defn event-collection [target-id coll-cnt token]
   "收集新鲜事 用来等会儿点赞"
@@ -105,14 +118,18 @@
     (loop [feed-contents '()
            cnt 0
            idx 0]
-      (if (> cnt coll-cnt)
-        (map #(feed-match-result-parser %) (first (partition coll-cnt (flatten feed-contents))))
+      (if (>= cnt coll-cnt)
+        (do
+          (println "feed-content count " (count  (flatten feed-contents)))
+          (println "drop-last count " (- cnt coll-cnt))
+          (println (drop-last (- (count (flatten feed-contents)) coll-cnt)  feed-contents))
+          (map #(feed-match-result-parser %)
+             (drop-last (- (count (flatten feed-contents)) coll-cnt) (flatten feed-contents))))
         (recur (cons (map #(match-all regular-expression-2 %) (match-all regular-expression-1 (:body (client/get (user-feed-coll-url
                                                                               target-id
                                                                               token
                                                                               1)
-                                                                             {:cookie-store renren-cookie}))))
-                     feed-contents)
+                                                                             {:cookie-store renren-cookie})))) feed-contents)
                (count feed-contents)
                (inc idx))))))
 
@@ -133,18 +150,19 @@
    (let [event-builder (case do-type
                           "addlike" do-like-event-url
                           "removelike" do-unlike-event-url)]
+     (println (count events) events)
      (loop [idx 0
-            cnt (count events)
+            cnt (dec (count events))
             r '()]
-       (println "do event " (nth events idx))
+       (println "idx : " idx " -> "(nth events idx))
        (Thread/sleep delay-time)
        (if (>= idx cnt)
          (flatten r)
          (recur (inc idx)
                 cnt
-                (cons (-> (nth events idx) event-builder r))))))))
+                (cons (-> (nth events idx) event-builder do-event-action) r)))))))
 
-(def analyzer (login "account" "password"
+(def analyzer (login "email" "password"
  (fn [{:keys [raw-headers links status headers body cookies trace-redirects]}]
    (if (and (= 200 status) (> (count trace-redirects) 0))
      {:user-id (apply str (rest (:uri (client/parse-url (last trace-redirects)))))
@@ -156,11 +174,11 @@
 
 (def token (get-token (:body analyzer)))
 
-(do-events-action "removelike" ; "addlike"
-                  (event-collection "target-id" 100 token)
+(do-events-action "addlike" ; removelike
+                  (event-collection "target-id" 50 token)
                   1000)
 
-(for-each [event (event-collection "target-id" 10 token)]
+(comment (for-each [event (event-collection "target-id" 10 token)]
   (do (println "do event")
     (Thread/sleep 1000)
-    (-> event do-unlike-event-url do-event-action println)))
+    (-> event do-unlike-event-url do-event-action println))))
