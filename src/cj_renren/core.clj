@@ -97,19 +97,6 @@
      (when-let [[~sym & xs#] (seq coll#)]
        ~@body
        (recur (next coll#)))))
-(def lst '())
-(drop-last 1 (flatten (map #(match-all regular-expression-2 %) (match-all regular-expression-1 (:body (client/get (user-feed-coll-url
-                                                                              "359364053"
-                                                                              token
-                                                                              1)
-                                                                             {:cookie-store renren-cookie}))))))
-
-
-(feed-match-result-parser (first (flatten (cons (map #(match-all regular-expression-2 %) (match-all regular-expression-1 (:body (client/get (user-feed-coll-url
-                                                                              "359364053"
-                                                                              token
-                                                                              1)
-                                                                             {:cookie-store renren-cookie})))) lst))))
 
 (defn event-collection [target-id coll-cnt token]
   "收集新鲜事 用来等会儿点赞"
